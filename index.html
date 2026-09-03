@@ -100,6 +100,10 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
       <div id="dashCats"></div>
     </div>
     <div class="card">
+      <h3>👥 חלוקת הוצאות החודש לפי מי</h3>
+      <div id="dashWho"></div>
+    </div>
+    <div class="card">
       <h3>📆 שבוע נוכחי — מה רשמנו</h3>
       <div id="dashWeek"></div>
     </div>
@@ -232,6 +236,21 @@ function showTab(n){
 }
 
 /* ===== מצב ===== */
+function renderDashWho(){
+  const es=entriesThisMonth();
+  const byWho={};
+  es.forEach(e=>{byWho[e.who]=(byWho[e.who]||0)+e.amt;});
+  const total=es.reduce((a,e)=>a+e.amt,0)||1;
+  const people=['נדב','טל'].filter(w=>byWho[w]!==undefined);
+  if(!es.length){$('dashWho').innerHTML='<p class="mut">אין הוצאות החודש — אחרי רישום ראשון תראו כאן חלוקה.</p>';return;}
+  const pct=w=>Math.round((byWho[w]||0)/total*100);
+  $('dashWho').innerHTML=`
+    <div class="cat"><div class="head"><b>👨 נדב</b><span class="mut">${money(byWho['נדב']||0)} · ${pct('נדב')}%</span></div>
+    <div class="bar blue"><div style="width:${pct('נדב')}%"></div></div></div>
+    <div class="cat"><div class="head"><b>👩 טל</b><span class="mut">${money(byWho['טל']||0)} · ${pct('טל')}%</span></div>
+    <div class="bar orange"><div style="width:${pct('טל')}%"></div></div></div>
+    <p class="mut">סה"כ החודש: ${money(total)} · הוצאות ללא סימון משויכות כברירת מחדל למי שרשם.</p>`;
+}
 function renderDash(){
   const inc=totalIncome(),fix=totalFixed(),planned=totalVarPlanned();
   const spent=totalSpentMonth(),varSpent=spentVarMonth();
@@ -264,6 +283,8 @@ function renderDash(){
     return `<div class="cat"><div class="head"><b>${c.n}</b><span class="mut">${money(sp)} / ${money(c.v)}</span></div>
     <div class="bar ${pct>90?'red':pct>70?'orange':''}"><div style="width:${pct}%"></div></div></div>`;
   }).join('');
+  // חלוקה לפי מי
+  renderDashWho();
   // השבוע
   const wk=weekRange();
   const wkEntries=state.entries.filter(e=>e.m===curMonth&&e.d>=wk[0]&&e.d<=wk[1]);
@@ -359,7 +380,11 @@ function renderHistory(){
   all.forEach(e=>{if(!byMonth[e.m])byMonth[e.m]=[];byMonth[e.m].push(e);});
   $('allEntries').innerHTML=Object.keys(byMonth).sort().reverse().map(m=>{
     const list=byMonth[m];const tot=list.reduce((a,e)=>a+e.amt,0);
-    return `<div class="card"><h3>${m} <span class="mut">(${money(tot)})</span></h3>${list.map(entryHtml).join('')}</div>`;
+    const n=list.filter(e=>e.who==='נדב').reduce((a,e)=>a+e.amt,0);
+    const t=list.filter(e=>e.who==='טל').reduce((a,e)=>a+e.amt,0);
+    const u=list.filter(e=>e.who!=='נדב'&&e.who!=='טל').reduce((a,e)=>a+e.amt,0);
+    const whoLine=`<div class="mut" style="font-size:.8em">👨 נדב: ${money(n)} · 👩 טל: ${money(t)}${u?` · ❔ אחר: ${money(u)}`:''}</div>`;
+    return `<div class="card"><h3>${m} <span class="mut">(${money(tot)})</span></h3>${whoLine}${list.map(entryHtml).join('')}</div>`;
   }).join('');
 }
 
