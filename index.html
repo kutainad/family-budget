@@ -195,6 +195,7 @@ const LS_KEY='fam_budget_v1';
 const DEF_FIXED=[
   {id:'rent',n:'שכירות',v:7250},{id:'elec',n:'חשמל',v:800},{id:'gan',n:'גן ניב',v:3900},
   {id:'tzh',n:'צהרון אימרי',v:800},{id:'loan1',n:'הלוואה 1',v:960},{id:'loan2',n:'הלוואה 2',v:411},
+  {id:'loan3',n:'הלוואת עובדים (50K)',v:1000,from:'2026-10'},
   {id:'gym',n:'מכון כושר',v:300},{id:'water',n:'מים',v:400},{id:'gas',n:'גז',v:100},
   {id:'arnona',n:'ארנונה (ממוצע)',v:375},{id:'raz',n:'רייזאפ',v:55},{id:'ins',n:'ביטוחים',v:1000},
   {id:'dig',n:'דיגיטל',v:209},{id:'vaad',n:'ועד בית',v:780},{id:'marpat',n:'מרפאט',v:130},
@@ -225,7 +226,7 @@ function monthKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(
 function showToast(m,err){const t=$('toast');t.textContent=m;t.className='toast show'+(err?' err':'');setTimeout(()=>t.className='toast',2600);}
 
 function totalIncome(){return (state.income.nadav||0)+(state.income.tal||0);}
-function totalFixed(){return state.fixed.reduce((a,f)=>a+(f.v||0),0);}
+function totalFixed(){return state.fixed.reduce((a,f)=>a+((!f.from||f.from<=curMonth)?(f.v||0):0),0);}
 function totalVarPlanned(){return state.varcat.reduce((a,c)=>a+(c.v||0),0);}
 function entriesThisMonth(){const m=curMonth;return state.entries.filter(e=>e.m===m);}
 function droppedEntries(){return entriesThisMonth().filter(e=>!e.st||e.st==='dropped');}
@@ -321,8 +322,12 @@ function renderBudget(){
   $('totalIncomeLabel').textContent=money(totalIncome());
   // קבועות
   $('fixedList').innerHTML=state.fixed.map(f=>`
-    <div class="exp-row"><span>${esc(f.n)}</span>${editingFixed?`<input type="number" style="width:100px" value="${f.v}" onchange="setFixed('${f.id}',this.value)">`:`<b>${money(f.v)}</b>`}</div>`).join('');
+    <div class="exp-row"><span>${esc(f.n)}${f.from?` <span class="week">החל ${f.from}</span>`:''}</span>${editingFixed?`<input type="number" style="width:100px" value="${f.v}" onchange="setFixed('${f.id}',this.value)">`:`<b>${money(f.v)}</b>`}</div>`).join('');
   $('fixedTotal').textContent=money(totalFixed());
+  if(totalFixed()<state.fixed.reduce((a,f)=>a+(f.v||0),0)){
+    const future=state.fixed.filter(f=>f.from&&f.from>curMonth).reduce((a,f)=>a+(f.v||0),0);
+    $('fixedTotal').parentElement.innerHTML+='<div class="mut" style="font-size:.75em">מהחודש הבא יתווספו: '+money(future)+'</div>';
+  }
   // משתנות
   $('varList').innerHTML=state.varcat.map(c=>{
     const sp=spentByCat(c.id);
@@ -413,6 +418,14 @@ function renderHistory(){
 }
 
 /* ===== סנכרון ===== */
+function mergeNewDefaults(){
+  // מוסיף הוצאות קבועות וקטגוריות חדשות שלא קיימות ב-state שנשמר
+  let changed=false;
+  DEF_FIXED.forEach(f=>{ if(!state.fixed.find(x=>x.id===f.id)){ state.fixed.push(JSON.parse(JSON.stringify(f))); changed=true; } });
+  DEF_VAR.forEach(c=>{ if(!state.varcat.find(x=>x.id===c.id)){ state.varcat.push(JSON.parse(JSON.stringify(c))); changed=true; } });
+  if(changed){ localStorage.setItem(LS_KEY,JSON.stringify(state)); }
+  return changed;
+}
 function save(){
   localStorage.setItem(LS_KEY,JSON.stringify(state));
   fetch('https://api.jsonbin.io/v3/b/'+BIN_ID,{
@@ -446,6 +459,7 @@ function pullCloud(){
 (function(){
   try{const s=JSON.parse(localStorage.getItem(LS_KEY));if(s&&s.income)state=s;}catch(e){}
   pullCloud().then(()=>{
+    mergeNewDefaults();
     $('incNadav').value=state.income.nadav;$('incTal').value=state.income.tal;
     renderDash();renderBudget();renderWeekly();renderHistory();
     $('syncBadge').textContent='☁️ מסונכרן';
