@@ -139,16 +139,23 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
   <!-- עדכון שבועי -->
   <div class="panel" id="panel-weekly">
     <div class="card">
-      <h3>➕ רישום הוצאה חדשה</h3>
+      <h3>📋 רישום הורדות שבועי (מהאשראי)</h3>
+      <p class="mut">פעם בשבוע: נכנסים לאפליקציות האשראי, ורושמים מה ירד / צפוי לרדת — מקבצים לפי קטגוריה. לא צריך לפרט כל קנייה!</p>
       <div class="row" style="margin-bottom:6px">
-        <div style="flex:1"><label>תאריך</label><input type="date" id="eDate"></div>
+        <div style="flex:0.9"><label>מקור</label><select id="eSrc">
+          <option>ישראכרט</option><option>כאל</option><option>מקס</option><option>מזומן/דביט</option><option>אחר</option>
+        </select></div>
         <div style="flex:1"><label>קטגוריה</label><select id="eCat"></select></div>
-        <div style="flex:1"><label>סכום (₪)</label><input type="number" id="eAmount" placeholder="0"></div>
+        <div style="flex:0.9"><label>סכום (₪)</label><input type="number" id="eAmount" placeholder="0"></div>
       </div>
       <div class="row">
-        <div style="flex:1.5"><label>תיאור (אופציונלי)</label><input type="text" id="eNote" placeholder="למשל: סופר שופרסל"></div>
-        <div style="flex:0.7"><label>מי רשם</label><select id="eWho"><option>נדב</option><option>טל</option></select></div>
-        <div style="flex:0.4;align-self:flex-end"><button class="btn" onclick="addEntry()">➕ הוספה</button></div>
+        <div style="flex:0.9"><label>תאריך החיוב</label><input type="date" id="eDate"></div>
+        <div style="flex:0.7"><label>סטטוס</label><select id="eStatus"><option value="dropped">ירדה בפועל</option><option value="expected">צפויה</option></select></div>
+        <div style="flex:1"><label>מי רשם</label><select id="eWho"><option>נדב</option><option>טל</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn grow" onclick="addEntry(false)">➕ הוספה והמשך</button>
+        <button class="btn blue" style="flex:0.6" onclick="addEntry(true)">✅ סיימתי</button>
       </div>
     </div>
     <div class="card">
@@ -162,7 +169,7 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
       <div id="balHistory" style="margin-top:8px"></div>
     </div>
     <div class="card">
-      <h3>📋 ההוצאות של החודש הנוכחי</h3>
+      <h3>📋 ההורדות של החודש</h3>
       <div id="entriesList"></div>
     </div>
   </div>
@@ -221,9 +228,12 @@ function totalIncome(){return (state.income.nadav||0)+(state.income.tal||0);}
 function totalFixed(){return state.fixed.reduce((a,f)=>a+(f.v||0),0);}
 function totalVarPlanned(){return state.varcat.reduce((a,c)=>a+(c.v||0),0);}
 function entriesThisMonth(){const m=curMonth;return state.entries.filter(e=>e.m===m);}
-function spentByCat(catId){return entriesThisMonth().filter(e=>e.cat===catId).reduce((a,e)=>a+e.amt,0);}
-function totalSpentMonth(){return entriesThisMonth().reduce((a,e)=>a+e.amt,0);}
-function spentVarMonth(){return entriesThisMonth().filter(e=>state.varcat.some(c=>c.id===e.cat)).reduce((a,e)=>a+e.amt,0);}
+function droppedEntries(){return entriesThisMonth().filter(e=>!e.st||e.st==='dropped');}
+function expectedEntries(){return entriesThisMonth().filter(e=>e.st==='expected');}
+function spentByCat(catId){return droppedEntries().filter(e=>e.cat===catId).reduce((a,e)=>a+e.amt,0);}
+function totalSpentMonth(){return droppedEntries().reduce((a,e)=>a+e.amt,0);}
+function totalExpectedMonth(){return expectedEntries().reduce((a,e)=>a+e.amt,0);}
+function spentVarMonth(){return droppedEntries().filter(e=>state.varcat.some(c=>c.id===e.cat)).reduce((a,e)=>a+e.amt,0);}
 function catById(id){return state.varcat.find(c=>c.id===id)||{n:id,id,icon:'❔'};}
 function lastBalance(){const keys=Object.keys(state.balances).sort();return keys.length?state.balances[keys[keys.length-1]]:null;}
 function showTab(n){
@@ -237,19 +247,20 @@ function showTab(n){
 
 /* ===== מצב ===== */
 function renderDashWho(){
-  const es=entriesThisMonth();
+  const es=droppedEntries();
   const byWho={};
   es.forEach(e=>{byWho[e.who]=(byWho[e.who]||0)+e.amt;});
   const total=es.reduce((a,e)=>a+e.amt,0)||1;
-  const people=['נדב','טל'].filter(w=>byWho[w]!==undefined);
-  if(!es.length){$('dashWho').innerHTML='<p class="mut">אין הוצאות החודש — אחרי רישום ראשון תראו כאן חלוקה.</p>';return;}
+  if(!es.length){$('dashWho').innerHTML='<p class="mut">אין הורדות שירדו בפועל החודש — אחרי העדכון השבועי תראו כאן חלוקה.</p>';return;}
   const pct=w=>Math.round((byWho[w]||0)/total*100);
+  const expTotal=totalExpectedMonth();
   $('dashWho').innerHTML=`
     <div class="cat"><div class="head"><b>👨 נדב</b><span class="mut">${money(byWho['נדב']||0)} · ${pct('נדב')}%</span></div>
     <div class="bar blue"><div style="width:${pct('נדב')}%"></div></div></div>
     <div class="cat"><div class="head"><b>👩 טל</b><span class="mut">${money(byWho['טל']||0)} · ${pct('טל')}%</span></div>
     <div class="bar orange"><div style="width:${pct('טל')}%"></div></div></div>
-    <p class="mut">סה"כ החודש: ${money(total)} · הוצאות ללא סימון משויכות כברירת מחדל למי שרשם.</p>`;
+    ${expTotal?`<div class="alert warn" style="padding:8px;margin-top:6px">⏳ <b>צפוי לרדת בהמשך החודש: ${money(expTotal)}</b> — כבר רשום, עוד לא יצא מהחשבון.</div>`:''}
+    <p class="mut">סה"כ שירד בפועל: ${money(total)} · הורדות ללא סימון משויכות למי שרשם.</p>`;
 }
 function renderDash(){
   const inc=totalIncome(),fix=totalFixed(),planned=totalVarPlanned();
@@ -298,7 +309,9 @@ function weekRange(){
 }
 function entryHtml(e){
   const c=catById(e.cat);
-  return `<div class="exp-row"><span>${e.d.slice(5).replace('-','/')} ${c.icon} ${esc(e.n||c.n)} <span class="tag ${e.who==='טל'?'tal':'nadav'}">${esc(e.who||'נדב')}</span></span><span style="display:flex;align-items:center;gap:6px"><b class="neg">-${money(e.amt)}</b><button class="del" onclick="delEntry('${e.id}')">✕</button></span></div>`;
+  const srcTag=e.src?` <span class="tag nadav">${esc(e.src)}</span>`:'';
+  const stTag=e.st==='expected'?' <span class="week">⏳ צפויה</span>':'';
+  return `<div class="exp-row"><span>${e.d.slice(5).replace('-','/')} ${c.icon} ${esc(e.n||c.n)}${srcTag}${stTag} <span class="tag ${e.who==='טל'?'tal':'nadav'}">${esc(e.who||'נדב')}</span></span><span style="display:flex;align-items:center;gap:6px"><b class="neg">-${money(e.amt)}</b><button class="del" onclick="delEntry('${e.id}')">✕</button></span></div>`;
 }
 
 /* ===== תקציב ===== */
@@ -321,16 +334,17 @@ function renderBudget(){
   $('varTotal').textContent=money(totalVarPlanned());
   // פנוי
   const inc=totalIncome(),fix=totalFixed(),varSpent=spentVarMonth(),varPlanned=totalVarPlanned();
+  const expVar=expectedEntries().filter(e=>state.varcat.some(c=>c.id===e.cat)).reduce((a,e)=>a+e.amt,0);
   const freeActual=inc-fix-varSpent;      // בפועל עד כה החודש
   const freePlanned=inc-fix-varPlanned;   // אם עומדים בתקציב
-  const leftToSpend=varPlanned-varSpent;  // כמה נשאר להוציא על משתנות
+  const leftToSpend=varPlanned-varSpent-expVar;  // כמה נשאר להוציא על משתנות (כולל מה שכבר צפוי)
   $('freeCalc').innerHTML=`
     <div class="sumline"><span>הכנסות</span><b class="pos">+${money(inc)}</b></div>
     <div class="sumline"><span>הוצאות קבועות</span><b class="neg">-${money(fix)}</b></div>
-    <div class="sumline"><span>תקציב משתנות מתוכנן (${money(varPlanned)})</span><b class="warn">-${money(varSpent)} הוצא עד כה</b></div>
+    <div class="sumline"><span>תקציב משתנות מתוכנן (${money(varPlanned)})</span><b class="warn">-${money(varSpent)} ירד בפועל${expVar?` · ${money(expVar)} צפוי`:''}</b></div>
     <div class="sumline" style="border-bottom:2px solid var(--green);font-size:1.05em"><b>פנוי אמיתי אם עומדים בתקציב</b><b class="${freePlanned<0?'neg':freePlanned<3000?'warn':'pos'}">${money(freePlanned)}</b></div>
     <div class="sumline"><b>נשאר להוציא על משתנות עד סוף החודש</b><b class="${leftToSpend<0?'neg':'pos'}">${money(leftToSpend)}</b></div>
-    <p class="mut" style="margin-top:6px">💡 הפנוי האמיתי (${money(freePlanned)}) הוא מה שנשאר אחרי כל ההוצאות אם לא חורגים מהתקציב — ממנו משלמים החזר הלוואה, חיסכון ובלת"מ.</p>`;
+    <p class="mut" style="margin-top:6px">💡 "נשאר להוציא" כבר מנכה מה שירד בפועל ומה שצפוי לרדת מהאשראי. הפנוי האמיתי (${money(freePlanned)}) הוא מה שנשאר אחרי כל ההוצאות — ממנו משלמים החזר הלוואה, חיסכון ובלת"מ.</p>`;
 }
 function saveIncome(){state.income.nadav=+$('incNadav').value||0;state.income.tal=+$('incTal').value||0;save();renderBudget();renderDash();showToast('✅ נשמר');}
 function setFixed(id,v){const f=state.fixed.find(x=>x.id===id);if(f)f.v=+v||0;save();renderBudget();renderDash();}
@@ -352,16 +366,26 @@ function renderWeekly(){
   $('balHistory').innerHTML=keys.length?keys.map(k=>`<div class="exp-row"><span>📅 ${k}</span><b class="${state.balances[k]<0?'neg':'pos'}">${fmtSigned(state.balances[k])}</b></div>`).join(''):'<p class="mut">עדיין אין יתרות שמורות.</p>';
   // רשימת החודש
   const es=entriesThisMonth().sort((a,b)=>b.d.localeCompare(a.d));
-  $('entriesList').innerHTML=es.length?es.map(entryHtml).join('')+'<div class="exp-row"><b>סה"כ החודש</b><b class="neg">-'+money(totalSpentMonth())+'</b></div>':'<p class="mut">אין הוצאות החודש. רשמו את הראשונה למעלה 👆</p>';
+  if(es.length){
+    // סיכום לפי מקור
+    const bySrc={};
+    es.forEach(e=>{if(e.src)bySrc[e.src]=(bySrc[e.src]||0)+e.amt;});
+    const srcLine=Object.keys(bySrc).map(s=>`<span class="week">${esc(s)}: ${money(bySrc[s])}</span>`).join(' ');
+    $('entriesList').innerHTML=`<div class="exp-row" style="margin-bottom:4px"><b>סה"כ לפי מקור:</b></div><div style="margin-bottom:8px">${srcLine||'<span class="mut">—</span>'}</div>${es.map(entryHtml).join('')}<div class="exp-row"><b>ירד בפועל החודש</b><b class="neg">-${money(totalSpentMonth())}</b></div>${totalExpectedMonth()?`<div class="exp-row"><b>⏳ צפוי בהמשך</b><b class="warn">-${money(totalExpectedMonth())}</b></div>`:''}`;
+  } else {
+    $('entriesList').innerHTML='<p class="mut">אין הורדות החודש. רשמו מה ירד/צפוי מהאשראי למעלה 👆</p>';
+  }
 }
-function addEntry(){
+function addEntry(done){
   const d=$('eDate').value,cat=$('eCat').value,amt=+$('eAmount').value;
   if(!amt||amt<=0){showToast('❌ הכניסו סכום',true);return;}
-  const note=$('eNote').value.trim();
+  const src=$('eSrc').value;
+  const st=$('eStatus').value;
   const who=$('eWho').value;
-  state.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,6),m:d.slice(0,7),d,cat,amt,note,who});
-  $('eAmount').value='';$('eNote').value='';
-  save();renderWeekly();renderDash();showToast('✅ נרשם: '+money(amt));
+  state.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,6),m:d.slice(0,7),d,cat,amt,src,st,who});
+  $('eAmount').value='';
+  save();renderWeekly();renderDash();showToast('✅ נרשם: '+money(amt)+(st==='expected'?' (צפויה)':''));
+  if(done){showTab('dash');showToast('✅ נשמר. אפשר לראות במצב');}
 }
 function delEntry(id){state.entries=state.entries.filter(e=>e.id!==id);save();renderWeekly();renderDash();showToast('🗑️ נמחק');}
 function addBalance(){
