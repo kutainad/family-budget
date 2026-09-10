@@ -128,9 +128,15 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
     </div>
     <div class="card">
       <h3>🍽️ הוצאות משתנות (קטגוריות) <button class="btn gray" style="padding:4px 10px;font-size:.75em" onclick="addCat()">➕ קטגוריה</button></h3>
-      <p class="mut">מגדירים כמה מתכננים להוציא על כל קטגוריה בחודש — ואז עוקבים בפועל מול זה.</p>
+      <p class="mut">בכל קטגוריה אפשר להוסיף את ההוצאות בפועל (סכום + הערה) ולעקוב אחרי מה שנשאר. סוגרים חודש ומתחילים נקי — התקציב המתוכנן נשמר.</p>
+      <div class="row" style="align-items:center;margin-bottom:8px">
+        <button class="btn gray" style="flex:0.3" onclick="monthShift(-1)">◀</button>
+        <div style="flex:1;text-align:center"><b id="monthLabel" style="font-size:1.05em"></b></div>
+        <button class="btn gray" style="flex:0.3" onclick="monthShift(1)">▶</button>
+      </div>
       <div id="varList"></div>
       <div class="sumline"><b>סה"כ מתוכנן למשתנות</b><b id="varTotal"></b></div>
+      <div class="sumline"><b>סה"כ ירד בפועל החודש</b><b id="varSpentTotal" class="neg"></b></div>
     </div>
     <div class="card" style="border:1px solid var(--green)">
       <h3>🧮 סיכום הפנוי החודשי</h3>
@@ -374,15 +380,40 @@ function renderBudget(){
     const future=state.fixed.filter(f=>f.from&&f.from>curMonth).reduce((a,f)=>a+(f.v||0),0);
     $('fixedTotal').parentElement.innerHTML+='<div class="mut" style="font-size:.75em">מהחודש הבא יתווספו: '+money(future)+'</div>';
   }
-  // משתנות
+  // משתנות — עם הוספת הוצאות בכל קטגוריה
+  $('monthLabel').textContent=monthLabelStr();
   $('varList').innerHTML=state.varcat.map(c=>{
-    const sp=spentByCat(c.id);
-    return `<div class="cat"><div class="head"><b>${c.n}</b><span><button class="del" onclick="delCat('${c.id}')" title="מחיקה">🗑️</button></span></div>
+    const sp=catSpent(c.id,curMonth);
+    const exp=catExpected(c.id,curMonth);
+    const left=c.v-sp;
+    const list=catEntries(c.id,curMonth);
+    const pct=c.v>0?Math.min(100,Math.round(sp/c.v*100)):0;
+    const addForm=_catOpen.add[c.id]?`
+      <div class="row" style="margin-top:7px;align-items:flex-end;background:var(--card);border-radius:9px;padding:7px">
+        <div style="flex:1"><label>תאריך</label><input type="date" id="caDate_${c.id}" value="${todayISO()}"></div>
+        <div style="flex:1"><label>סכום (₪)</label><input type="number" id="caAmt_${c.id}" placeholder="0"></div>
+        <div style="flex:1.4"><label>הערה (בית עסק)</label><input type="text" id="caNote_${c.id}" placeholder="סופר / מסעדה..."></div>
+        <div style="flex:0.8"><label>מי</label><select id="caWho_${c.id}"><option>נדב</option><option>טל</option></select></div>
+        <div style="flex:0.7"><button class="btn blue" style="width:100%" onclick="catAddSave('${c.id}')">💾 הוסף</button></div>
+      </div>`:'';
+    const listHtml=_catOpen.list[c.id]?`
+      <div style="margin-top:6px">${list.length?list.map(e=>`
+        <div class="exp-row"><span>${e.d.slice(8)}/${e.d.slice(5,7)} ${esc(e.n||c.n)}${e.st==='expected'?' <span class="week">⏳ צפויה</span>':''}</span>
+        <span style="display:flex;align-items:center;gap:6px"><b class="neg">-${money(e.amt)}</b><button class="del" onclick="delEntry('${e.id}');renderBudget()">✕</button></span></div>`).join('')
+        :'<p class="mut" style="font-size:.85em">אין הוצאות בקטגוריה הזו בחודש הזה.</p>'}</div>`:'';
+    return `<div class="cat"><div class="head"><b>${c.n}</b><span style="display:flex;gap:4px;align-items:center">
+      <button class="btn gray" style="padding:2px 8px;font-size:.7em" onclick="catToggleAdd('${c.id}')">➕ הוצאה</button>
+      <button class="btn gray" style="padding:2px 8px;font-size:.7em" onclick="catToggleList('${c.id}')">📋 ${list.length}</button>
+      <button class="del" onclick="delCat('${c.id}')" title="מחיקת קטגוריה">🗑️</button></span></div>
     <div class="row"><div class="grow"><label>תקציב חודשי מתוכנן</label><input type="number" value="${c.v}" onchange="setVar('${c.id}',this.value)"></div>
-    <div style="flex:1"><label>הוצא בפועל החודש</label><b class="${sp>c.v?'neg':'pos'}">${money(sp)}</b></div></div>
-    <div class="bar ${sp>c.v?'red':sp>c.v*0.85?'orange':''}"><div style="width:${c.v>0?Math.min(100,sp/c.v*100):0}%"></div></div></div>`;
+    <div style="flex:1"><label>ירד בפועל</label><b class="${sp>c.v?'neg':'pos'}">${money(sp)}</b></div>
+    <div style="flex:1"><label>נשאר</label><b class="${left<0?'neg':'pos'}">${money(left)}</b></div></div>
+    <div class="bar ${sp>c.v?'red':pct>85?'orange':''}"><div style="width:${pct}%"></div></div>
+    ${exp?`<div class="mut" style="font-size:.78em">⏳ צפוי בהמשך החודש: ${money(exp)}</div>`:''}
+    ${addForm}${listHtml}</div>`;
   }).join('');
   $('varTotal').textContent=money(totalVarPlanned());
+  $('varSpentTotal').textContent='-'+money(spentVarMonth());
   // פנוי
   const inc=totalIncome(),fix=totalFixed(),varSpent=spentVarMonth(),varPlanned=totalVarPlanned();
   const expVar=expectedEntries().filter(e=>state.varcat.some(c=>c.id===e.cat)).reduce((a,e)=>a+e.amt,0);
@@ -445,6 +476,28 @@ function addBalance(){
   state.balances[d]=v;
   $('bAmount').value='';
   save();renderWeekly();renderDash();showToast('✅ יתרה נשמרה: '+fmtSigned(v));
+}
+
+/* ===== ניהול הוצאות לפי קטגוריה (חודשי) ===== */
+let _catOpen={add:{},list:{}};
+const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+function monthLabelStr(){const p=curMonth.split('-').map(Number);return MONTHS[p[1]-1]+' '+p[0];}
+function monthShift(d){const p=curMonth.split('-').map(Number);const dt=new Date(p[0],p[1]-1+d,1);curMonth=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');renderBudget();renderDash();}
+function catSpent(id,m){return state.entries.filter(e=>e.m===m&&e.cat===id&&(!e.st||e.st==='dropped')).reduce((a,e)=>a+e.amt,0);}
+function catExpected(id,m){return state.entries.filter(e=>e.m===m&&e.cat===id&&e.st==='expected').reduce((a,e)=>a+e.amt,0);}
+function catEntries(id,m){return state.entries.filter(e=>e.m===m&&e.cat===id).sort((a,b)=>b.d.localeCompare(a.d));}
+function catToggleAdd(id){_catOpen.add[id]=!_catOpen.add[id];renderBudget();}
+function catToggleList(id){_catOpen.list[id]=!_catOpen.list[id];renderBudget();}
+function catAddSave(id){
+  const d=($('caDate_'+id)||{}).value||todayISO();
+  const amt=+($('caAmt_'+id)||{}).value;
+  const note=(($('caNote_'+id)||{}).value||'').trim();
+  const who=(($('caWho_'+id)||{}).value)||'נדב';
+  if(!amt||amt<=0){showToast('❌ הכניסו סכום',true);return;}
+  state.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,6),m:d.slice(0,7),d,cat:id,amt,src:'',st:'dropped',who,n:note||catById(id).n});
+  save(); _catOpen.add[id]=false; _catOpen.list[id]=true;
+  renderBudget(); renderDash(); renderWeekly();
+  showToast('✅ נוסף '+money(amt)+' ל'+catById(id).n);
 }
 
 /* ===== ייבוא מכרטיסי אשראי ===== */
@@ -610,6 +663,7 @@ function pullCloud(){
 window.showTab=showTab;window.saveIncome=saveIncome;window.setFixed=setFixed;window.setVar=setVar;
 window.toggleEditFixed=toggleEditFixed;window.addCat=addCat;window.delCat=delCat;
 window.importParse=importParse;window.importAdd=importAdd;window.renderImportList=renderImportList;window.renderImportTotals=renderImportTotals;
+window.monthShift=monthShift;window.catToggleAdd=catToggleAdd;window.catToggleList=catToggleList;window.catAddSave=catAddSave;
 window.addEntry=addEntry;window.delEntry=delEntry;window.addBalance=addBalance;
 </script>
 </body>
