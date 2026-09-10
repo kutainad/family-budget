@@ -78,6 +78,7 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
     <button class="tab active" onclick="showTab('dash')">📊 מצב</button>
     <button class="tab" onclick="showTab('budget')">💰 תקציב</button>
     <button class="tab" onclick="showTab('weekly')">💳 עדכון שבועי</button>
+    <button class="tab" onclick="showTab('import')">📥 ייבוא מכרטיסים</button>
     <button class="tab" onclick="showTab('history')">📜 היסטוריה</button>
   </div>
 
@@ -175,6 +176,45 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
     </div>
   </div>
 
+  <!-- ייבוא מכרטיסים -->
+  <div class="panel" id="panel-import">
+    <div class="card">
+      <h3>📥 ייבוא הוצאות מכרטיסי האשראי</h3>
+      <p class="mut">לישיבת התקציב השבועית: מדביקים את רשימת החיובים מאפליקציית האשראי — שורה לכל חיוב, בפורמט <b>תאריך, בית עסק, סכום</b> (או פשוט <b>בית עסק, סכום</b>). המערכת תזהה קטגוריה אוטומטית, תסנן כפילויות ותוסיף הכל.</p>
+      <div class="row" style="margin-bottom:6px">
+        <div style="flex:1"><label>כרטיס / מקור</label><select id="iSrc">
+          <option>כאל</option><option>מקס</option><option>ישראכרט</option><option>מזומן/דביט</option><option>אחר</option>
+        </select></div>
+        <div style="flex:1"><label>סטטוס</label><select id="iStatus">
+          <option value="dropped">ירדה בפועל</option><option value="expected">צפויה (עוד לא ירדה)</option>
+        </select></div>
+        <div style="flex:1"><label>מי רשם</label><select id="iWho"><option>נדב</option><option>טל</option></select></div>
+      </div>
+      <textarea id="iText" dir="ltr" placeholder="10/09/2026, סופרמרקט שופרסל, 245.90
+10/09/2026, פארמה פרמה, 89.90
+09/09/2026, דלק סונול, 300" style="width:100%;min-height:130px;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px;font-family:inherit;font-size:.9em"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn blue grow" onclick="importParse()">🔍 נתח והצג תצוגה מקדימה</button>
+        <button class="btn gray" style="flex:0.4" onclick="$('iText').value='';importParse()">נקה</button>
+      </div>
+    </div>
+
+    <div class="card" id="importPreviewCard" style="display:none">
+      <h3>👁️ תצוגה מקדימה — לאשר ולהוסיף</h3>
+      <div id="importTotals" class="mut" style="margin-bottom:6px"></div>
+      <div id="importList"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn grow" onclick="importAdd()">✅ הוסף הכל לתקציב</button>
+      </div>
+      <p class="mut">שורות מסומנות ✔︎ יתווספו. אפשר לשנות קטגוריה לפני ההוספה.</p>
+    </div>
+
+    <div class="card">
+      <h3>📅 סיכום שבועי לפי כרטיס</h3>
+      <div id="cardWeekly"></div>
+    </div>
+  </div>
+
   <!-- היסטוריה -->
   <div class="panel" id="panel-history">
     <div class="card">
@@ -243,10 +283,10 @@ function lastBalance(){const keys=Object.keys(state.balances).sort();return keys
 function showTab(n){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const o={dash:0,budget:1,weekly:2,history:3};
+  const o={dash:0,budget:1,weekly:2,import:3,history:4};
   document.querySelectorAll('.tab')[o[n]].classList.add('active');
   $('panel-'+n).classList.add('active');
-  if(n==='dash')renderDash(); if(n==='budget')renderBudget(); if(n==='weekly')renderWeekly(); if(n==='history')renderHistory();
+  if(n==='dash')renderDash(); if(n==='budget')renderBudget(); if(n==='weekly')renderWeekly(); if(n==='import')renderImport(); if(n==='history')renderHistory();
 }
 
 /* ===== מצב ===== */
@@ -407,6 +447,101 @@ function addBalance(){
   save();renderWeekly();renderDash();showToast('✅ יתרה נשמרה: '+fmtSigned(v));
 }
 
+/* ===== ייבוא מכרטיסי אשראי ===== */
+const CATMAP=[
+  [['סופרמרקט','שופרסל','רמי לוי','ויקטורי','יוחננוף','אושר עד','מגה','קרפור','קארפור','מחסני','טיב טעם','מכולת','ירקות','פירות'],'food'],
+  [['מסעד','קפה','פיצה','בורגר','סושי','שווארמה','חומוס','פאב','ארומה','ארקפה','מקדונלד','ג\'אנגו','פסטה','ברים','בר '],'eatout'],
+  [['דלק','סונול','פז ','דור אלון','yellow','פנגו','חני','חנין','אגד','רכבת','מונית','גט','סיטי פאס','כביש 6'],'fuel'],
+  [['צעצוע','ילד','משחק','חוג ','קייטנה','חיתול','בית ספר','גן ילדים'],'kids'],
+  [['פארם','מרקחת','קופת חולים','כללית','מכבי','לאומית','מאוחדת','תרופ','מרפא','שיני','אופטיק','רופא'],'health'],
+  [['זארה','קסטרו','פוקס','אמריקן','גולף','ספורט','נעל','ביגוד','אופנה','שזר','בוניטה','טרמינל','אלונית','אופנת'],'clothes']
+];
+function catGuess(name){
+  const n=String(name||'').toLowerCase();
+  for(const [kws,id] of CATMAP){ if(kws.some(k=>n.includes(String(k).toLowerCase()))) return id; }
+  return 'other';
+}
+let _imp=[];
+function parseLine(line){
+  let s=line.trim(); if(!s) return null;
+  const parts=s.split(/[,\t;|]+/).map(x=>x.trim()).filter(Boolean);
+  if(!parts.length) return null;
+  let d=null,amt=null;
+  // תאריך
+  for(const p of parts){
+    let m=p.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})$/);
+    if(m){ const y=m[3].length===2?('20'+m[3]):m[3]; d=`${y}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`; break; }
+    m=p.match(/^(\d{4})-(\d{2})-(\d{2})$/); if(m){ d=p; break; }
+  }
+  const nums=[];
+  parts.forEach(p=>{ const c=p.replace(/[^\d.,\-]/g,'').replace(/,/g,''); if(/^-?\d+(\.\d+)?$/.test(c)&&c!=='') nums.push({p, v:Math.abs(parseFloat(c))}); });
+  if(nums.length){ nums.sort((a,b)=>b.v-a.v); amt=nums[0].v; }
+  const nameParts=parts.filter(p=>p!==String(amt)&&(!d||!p.includes('-')&&!p.includes('/'))).filter(p=>!/^\d+([.,]\d+)?$/.test(p));
+  const name=nameParts.join(' ').replace(/\s+/g,' ').trim()||'(לא ידוע)';
+  if(!amt||amt<=0) return null;
+  return {d:d||todayISO(), name, amt, cat:catGuess(name), ok:true};
+}
+function importParse(){
+  const lines=$('iText').value.split('\n');
+  _imp=lines.map(parseLine).filter(Boolean);
+  const card=$('importPreviewCard');
+  if(!_imp.length){ card.style.display='none'; showToast('לא זוהו חיובים — בדקו את הפורמט',true); return; }
+  card.style.display='block';
+  const tot=_imp.reduce((a,x)=>a+x.amt,0);
+  $('importTotals').innerHTML=`זוהו <b>${_imp.length}</b> חיובים · סה"כ <b>${money(tot)}</b> · כרטיס: <b>${esc($('iSrc').value)}</b>`;
+  renderImportList();
+  if(_imp.length>=3) showToast('✅ '+_imp.length+' חיובים — אפשר לאשר');
+}
+function renderImportList(){
+  const cats=state.varcat.map(c=>`<option value="${c.id}">${c.n}</option>`).join('');
+  $('importList').innerHTML=_imp.map((x,i)=>`
+    <div class="exp-row">
+      <input type="checkbox" ${x.ok?'checked':''} onchange="_imp[${i}].ok=this.checked;renderImportTotals()">
+      <span style="flex:1">${esc(x.d.slice(8))}/${esc(x.d.slice(5,7))} · ${esc(x.name)}</span>
+      <select onchange="_imp[${i}].cat=this.value" style="max-width:150px">${cats}</select>
+      <b style="min-width:70px;text-align:left">${money(x.amt)}</b>
+    </div>`).join('');
+  _imp.forEach((x,i)=>{const s=$('importList').querySelectorAll('select')[i]; if(s)s.value=x.cat;});
+  renderImportTotals();
+}
+function renderImportTotals(){
+  const sel=_imp.filter(x=>x.ok);
+  const byCat={};
+  sel.forEach(x=>byCat[x.cat]=(byCat[x.cat]||0)+x.amt);
+  const parts=Object.keys(byCat).map(k=>{const c=state.varcat.find(v=>v.id===k);return `${c?c.n:k}: ${money(byCat[k])}`;});
+  $('importTotals').innerHTML=`נבחרו <b>${sel.length}</b> חיובים · סה"כ <b>${money(sel.reduce((a,x)=>a+x.amt,0))}</b><br><span class="mut">${parts.join(' · ')||''}</span>`;
+}
+function importAdd(){
+  const sel=_imp.filter(x=>x.ok); if(!sel.length){showToast('לא נבחרו חיובים',true);return;}
+  const src=$('iSrc').value, st=$('iStatus').value, who=$('iWho').value;
+  const sig=state.entries.map(e=>[e.d,e.amt,e.src,e.cat].join('|'));
+  let add=0, dup=0;
+  sel.forEach(x=>{
+    const k=[x.d,x.amt,src,x.cat].join('|');
+    if(sig.includes(k)){dup++;return;}
+    sig.push(k);
+    state.entries.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,6),m:x.d.slice(0,7),d:x.d,cat:x.cat,amt:x.amt,src,st,who});
+    add++;
+  });
+  save(); renderImport(); renderWeekly(); renderDash();
+  showToast(`✅ נוספו ${add} חיובים${dup?` · ${dup} כפילויות דולגו`:''}`);
+}
+function renderCardWeekly(){
+  const es=entriesThisMonth();
+  const bySrc={};
+  es.forEach(e=>{const s=e.src||'לא מסומן';bySrc[s]=bySrc[s]||{d:0,x:0,n:0};bySrc[s][e.st==='expected'?'x':'d']+=e.amt;bySrc[s].n++;});
+  const keys=Object.keys(bySrc);
+  if(!keys.length){$('cardWeekly').innerHTML='<p class="mut">אין רישומים החודש. ייבאו חיובים למעלה 👆</p>';return;}
+  const byCat={}; es.forEach(e=>{byCat[e.cat]=(byCat[e.cat]||0)+e.amt;});
+  $('cardWeekly').innerHTML=keys.map(k=>{
+    const o=bySrc[k];
+    return `<div class="exp-row"><span>💳 <b>${esc(k)}</b> <span class="mut">(${o.n} חיובים)</span></span>
+      <span><b class="neg">-${money(o.d)}</b>${o.x?` <span class="week">⏳ ${money(o.x)}</span>`:''}</span></div>`;
+  }).join('')+`<div class="sumline"><b>סה"כ החודש</b><b class="neg">-${money(es.reduce((a,e)=>a+e.amt,0))}</b></div>`
+   +`<div class="mut" style="margin-top:6px">לפי קטגוריה: ${Object.keys(byCat).map(k=>{const c=state.varcat.find(v=>v.id===k);return `${c?c.n:k} ${money(byCat[k])}`;}).join(' · ')}</div>`;
+}
+function renderImport(){ renderCardWeekly(); if(_imp.length) renderImportList(); }
+
 /* ===== היסטוריה ===== */
 function renderHistory(){
   const all=state.entries.slice().sort((a,b)=>b.d.localeCompare(a.d));
@@ -467,13 +602,14 @@ function pullCloud(){
   pullCloud().then(()=>{
     mergeNewDefaults();
     $('incNadav').value=state.income.nadav;$('incTal').value=state.income.tal;
-    renderDash();renderBudget();renderWeekly();renderHistory();
+    renderDash();renderBudget();renderWeekly();renderImport();renderHistory();
     $('syncBadge').textContent='☁️ מסונכרן';
     showToast('☁️ נטען מהענן');
   });
 })();
 window.showTab=showTab;window.saveIncome=saveIncome;window.setFixed=setFixed;window.setVar=setVar;
 window.toggleEditFixed=toggleEditFixed;window.addCat=addCat;window.delCat=delCat;
+window.importParse=importParse;window.importAdd=importAdd;window.renderImportList=renderImportList;window.renderImportTotals=renderImportTotals;
 window.addEntry=addEntry;window.delEntry=delEntry;window.addBalance=addBalance;
 </script>
 </body>
