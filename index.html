@@ -88,6 +88,7 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
       <div class="stat"><b id="dMonthLeft">—</b><small>נשאר להוציא החודש</small></div>
       <div class="stat"><b id="dSpent">—</b><small>הוצא השחודש</small></div>
       <div class="stat"><b id="dIncomeMonth">—</b><small>הכנסות החודש</small></div>
+      <div class="stat"><b id="dSurplus">—</b><small>🎯 עודף לכיסוי מינוס/הלוואה</small></div>
     </div>
     <div id="dashAlert"></div>
     <div class="card">
@@ -196,20 +197,22 @@ const DEF_FIXED=[
   {id:'rent',n:'שכירות',v:7250},{id:'elec',n:'חשמל',v:800},{id:'gan',n:'גן ניב',v:3900},
   {id:'tzh',n:'צהרון אימרי',v:800},{id:'loan1',n:'הלוואה 1',v:960},{id:'loan2',n:'הלוואה 2',v:411},
   {id:'loan3',n:'הלוואת עובדים (50K)',v:1000,from:'2026-10'},
-  {id:'gym',n:'מכון כושר',v:300},{id:'water',n:'מים',v:400},{id:'gas',n:'גז',v:100},
+  {id:'gym',n:'מכון כושר',v:600},{id:'water',n:'מים',v:400},{id:'gas',n:'גז',v:100},
   {id:'arnona',n:'ארנונה (ממוצע)',v:375},{id:'raz',n:'רייזאפ',v:55},{id:'ins',n:'ביטוחים',v:1000},
   {id:'dig',n:'דיגיטל',v:209},{id:'vaad',n:'ועד בית',v:780},{id:'marpat',n:'מרפאט',v:130},
-  {id:'shoter',n:'קרנות השוטרים',v:41},{id:'cardfee',n:'דמי כרטיס',v:9},{id:'pango',n:'פנגו',v:100},
-  {id:'comm',n:'תקשורת',v:179},{id:'clalit',n:'כללית',v:500}
+  {id:'shoter',n:'קרנות השוטרים',v:41},{id:'cardfee',n:'דמי כרטיס',v:49},{id:'pango',n:'פנגו',v:100},
+  {id:'comm',n:'תקשורת',v:179},{id:'clalit',n:'כללית',v:500},
+  {id:'nails',n:'ציפורניים',v:190},{id:'brows',n:'גבות',v:90},{id:'parking',n:'חניה',v:1000},
+  {id:'fuel_fixed',n:'דלק',v:400},{id:'alton',n:'אלטון אוכל',v:170},
 ];
 const DEF_VAR=[
-  {id:'food',n:'🍞 סופר ואוכל בית',v:4500,icon:'🍞'},
-  {id:'eatout',n:'🍽️ מסעדות/בילויים',v:1200,icon:'🍽️'},
-  {id:'fuel',n:'⛽ דלק/תחבורה',v:1200,icon:'⛽'},
-  {id:'kids',n:'🧒 ילדים/צעצועים',v:800,icon:'🧒'},
-  {id:'health',n:'💊 בריאות/תרופות',v:600,icon:'💊'},
-  {id:'clothes',n:'👕 קניות/ביגוד',v:600,icon:'👕'},
-  {id:'other',n:'📦 אחר/בלת\"מ',v:600,icon:'📦'}
+  {id:'food',n:'🍞 סופר ואוכל בית',v:2000,icon:'🍞'},
+  {id:'eatout',n:'🍽️ יציאות ופנאי',v:500,icon:'🍽️'},
+  {id:'fuel',n:'⛽ דלק/תחבורה (הועבר לקבועות)',v:0,icon:'⛽'},
+  {id:'kids',n:'🧒 ילדים (תרופות/בגדים/ציוד)',v:500,icon:'🧒'},
+  {id:'health',n:'💊 בריאות/תרופות',v:250,icon:'💊'},
+  {id:'clothes',n:'👕 קניות/ביגוד',v:250,icon:'👕'},
+  {id:'other',n:'📦 אחר/בלת\"מ',v:250,icon:'📦'}
 ];
 
 /* ===== מדינה ===== */
@@ -268,6 +271,9 @@ function renderDash(){
   const spent=totalSpentMonth(),varSpent=spentVarMonth();
   const left=inc-fix-varSpent;
   $('dIncomeMonth').textContent=money(inc);
+  const surplus=inc-fix-planned;
+  const sEl=$('dSurplus'); sEl.textContent=money(surplus);
+  sEl.className='big '+(surplus>0?'pos':surplus>-500?'warn':'neg');
   $('dSpent').textContent='-'+money(varSpent);
   const lEl=$('dMonthLeft'); lEl.textContent=money(Math.max(0,left));
   lEl.className='big '+(left<0?'neg':left<3000?'warn':'pos');
