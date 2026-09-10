@@ -72,6 +72,7 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
     <span class="sync" id="syncBadge">☁️ ...</span>
     <h1>🏠 תקציב משפחתי — קוטאי</h1>
     <p>נדב + טל · מעקב שוטף · עדכון שבועי · סנכרון ענן</p>
+    <button class="btn gray" style="margin-top:8px;padding:5px 14px;font-size:.8em" onclick="syncNow(true)">🔄 סנכרן עכשיו</button>
   </div>
 
   <div class="tabs">
@@ -229,7 +230,7 @@ label{font-size:.75em;color:var(--mut);display:block;margin:4px 0 2px}
     </div>
   </div>
 
-  <div class="footer">תקציב משפחתי קוטאי · ☁️ מסונכרן · נבנה ע"י Hermes</div>
+  <div class="footer">תקציב משפחתי קוטאי · ☁️ מסונכרן · נבנה ע"י Hermes · <span id="verLabel"></span></div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -612,6 +613,17 @@ function renderHistory(){
 }
 
 /* ===== סנכרון ===== */
+const APP_VERSION='4.0 · 10.09.2026';
+function renderAll(){renderDash();renderBudget();renderWeekly();renderImport();renderHistory();}
+function syncNow(showMsg){
+  pullCloud().then(()=>{
+    renderAll();
+    $('syncBadge').textContent='☁️ מסונכרן '+new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+    if(showMsg) showToast('✅ נטען מהענן');
+  }).catch(()=>{ if(showMsg) showToast('⚠️ הסנכרון נכשל — בדקו חיבור לאינטרנט',true); });
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) syncNow(false); });
+window.syncNow=syncNow;
 function mergeNewDefaults(){
   // מוסיף הוצאות קבועות וקטגוריות חדשות שלא קיימות ב-state שנשמר
   let changed=false;
@@ -656,6 +668,7 @@ function pullCloud(){
     mergeNewDefaults();
     $('incNadav').value=state.income.nadav;$('incTal').value=state.income.tal;
     renderDash();renderBudget();renderWeekly();renderImport();renderHistory();
+    $('verLabel').textContent='גרסה '+APP_VERSION;
     $('syncBadge').textContent='☁️ מסונכרן';
     showToast('☁️ נטען מהענן');
   });
