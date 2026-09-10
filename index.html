@@ -377,10 +377,6 @@ function renderBudget(){
   $('fixedList').innerHTML=state.fixed.map(f=>`
     <div class="exp-row"><span>${esc(f.n)}${f.from?` <span class="week">החל ${f.from}</span>`:''}</span>${editingFixed?`<input type="number" style="width:100px" value="${f.v}" onchange="setFixed('${f.id}',this.value)">`:`<b>${money(f.v)}</b>`}</div>`).join('');
   $('fixedTotal').textContent=money(totalFixed());
-  if(totalFixed()<state.fixed.reduce((a,f)=>a+(f.v||0),0)){
-    const future=state.fixed.filter(f=>f.from&&f.from>curMonth).reduce((a,f)=>a+(f.v||0),0);
-    $('fixedTotal').parentElement.innerHTML+='<div class="mut" style="font-size:.75em">מהחודש הבא יתווספו: '+money(future)+'</div>';
-  }
   // משתנות — עם הוספת הוצאות בכל קטגוריה
   $('monthLabel').textContent=monthLabelStr();
   $('varList').innerHTML=state.varcat.map(c=>{
